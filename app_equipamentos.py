@@ -97,17 +97,52 @@ def main():
     
     st.title("⚙️ Análise Segura de Equipamentos")
     
-    # Upload com validação
     uploaded_file = st.file_uploader("Carregue o arquivo", type=['xlsx', 'xls'])
+    
     if uploaded_file and validate_file(uploaded_file):
         try:
             df = pd.read_excel(uploaded_file)
+            df = sanitize_data(df)  # Sua função de sanitização
+            
+            if df.empty:
+                st.warning("Nenhum dado válido encontrado após sanitização")
+                return
+            
+            # Processa os dados
             df_resultado, df_txt = analisar_dados_seguro(df)
             
-            # ... [seu código de exibição] ...
+            # Verifica se a análise retornou resultados
+            if df_resultado.empty or df_txt.empty:
+                st.warning("Nenhum resultado válido gerado pela análise")
+                return
+            
+            # --- SEU CÓDIGO DE EXIBIÇÃO DE RESULTADOS ---
+            st.subheader("Resultados da Análise")
+            st.dataframe(df_resultado)
+            
+            # Exportação para Excel
+            output_excel = io.BytesIO()
+            with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+                df_resultado.to_excel(writer, index=False)
+            st.download_button(
+                label="Baixar Excel",
+                data=output_excel.getvalue(),
+                file_name="resultados.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+            # Exportação para TXT
+            output_txt = io.StringIO()
+            df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
+            st.download_button(
+                label="Baixar TXT",
+                data=output_txt.getvalue(),
+                file_name="eventos.txt",
+                mime="text/plain"
+            )
             
         except Exception as e:
-            st.error(f"Erro processando arquivo: {str(e)}")
+            st.error(f"Erro no processamento: {str(e)}")
 
 if __name__ == "__main__":
     main()
