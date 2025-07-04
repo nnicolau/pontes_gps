@@ -106,7 +106,7 @@ def main():
                 
                 # TXT
                 output_txt = io.StringIO()
-                df_txt.to_csv(output_txt, index=False, header=False, line_terminator='\n')
+                df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
                 st.download_button(
                     label="Baixar Eventos em TXT",
                     data=output_txt.getvalue(),
