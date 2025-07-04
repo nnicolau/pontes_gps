@@ -3,3 +3,5 @@ pandas
 openpyxl
 xlrd
 numpy
+bcrypt==4.0.1
+pyjwt==2.6.0
