@@ -8,33 +8,47 @@ import os
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 
-# Configuração de segurança
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    st.warning("dotenv não está instalado. Usando variáveis padrão.")
+# --- Carregar variáveis do .env ---
+load_dotenv()
 
-# Configurações de segurança
-SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key-123')
-PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
-
-# Função de autenticação
-def check_password():
-    """Verifica se o usuário digitou a senha correta."""
-    if 'authenticated' in st.session_state and st.session_state.authenticated:
+# --- Função de autenticação segura com bcrypt ---
+def autenticar_usuario():
+    if 'autenticado' in st.session_state and st.session_state.autenticado:
         return True
-    
-    password = st.text_input("Senha de acesso", type="password", key="password_input")
-    
-    if password:
-        if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
-            st.session_state.authenticated = True
-            st.rerun()
+
+    st.set_page_config(page_title="Gestão de Férias - Login", layout="wide")
+    st.title("🔐 Autenticação")
+    username = st.text_input("Utilizador")
+    password = st.text_input("Senha", type="password")
+
+    if st.button("Entrar"):
+        hash_guardado = os.getenv(f"USER_{username}")
+        if hash_guardado:
+            if bcrypt.checkpw(password.encode(), hash_guardado.encode()):
+                st.session_state.autenticado = True
+                st.session_state.usuario = username
+                st.session_state.last_activity = datetime.now()
+                st.success("✅ Login efetuado com sucesso.")
+                st.rerun()
+            else:
+                st.error("❌ Senha incorreta.")
         else:
-            st.error("Senha incorreta")
-    
-    return False
+            st.error("❌ Utilizador não encontrado.")
+
+    st.stop()
+
+def check_timeout():
+    if 'last_activity' in st.session_state:
+        if datetime.now() - st.session_state['last_activity'] > timedelta(minutes=20):
+            st.session_state.clear()
+            st.warning("Sessão expirada. Faça login novamente.")
+            st.stop()
+        else:
+            st.session_state['last_activity'] = datetime.now()
+
+# --- Autenticação obrigatória ---
+autenticar_usuario()
+check_timeout()
 
 # Função para converter para datetime seguro
 def safe_to_datetime(date_series):
