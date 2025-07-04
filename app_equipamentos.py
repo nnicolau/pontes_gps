@@ -56,14 +56,39 @@ def analisar_dados_seguro(df):
         if not all(col in df.columns for col in required_cols):
             raise ValueError("Colunas obrigatórias faltando")
             
-        # Processamento seguro (mantenha sua lógica existente)
-        # ... [seu código atual] ...
+        # Inicializa variáveis de resultado
+        df_resultado = pd.DataFrame()
+        df_txt = pd.DataFrame()
         
+        # --- INSIRA AQUI SEU CÓDIGO ORIGINAL DE ANÁLISE ---
+        # (mantenha toda a lógica de processamento que você já tinha)
+        # Certifique-se de que df_resultado e df_txt são criados
+        
+        # Exemplo mínimo (substitua pelo seu código real):
+        df['DATA_HORA'] = pd.to_datetime(df['DATA_HORA'])
+        df = df.sort_values(['ID', 'SINAL', 'DATA_HORA'])
+        
+        periodos_ligado = []
+        eventos_txt = []
+        
+        for (id_val, sinal), grupo in df.groupby(['ID', 'SINAL']):
+            # ... sua lógica de análise ...
+            periodos_ligado.append({...})
+            eventos_txt.append(...)
+        
+        df_resultado = pd.DataFrame(periodos_ligado)
+        df_txt = pd.DataFrame(eventos_txt, columns=['Evento'])
+        # --- FIM DO SEU CÓDIGO ORIGINAL ---
+        
+        if df_resultado.empty or df_txt.empty:
+            raise ValueError("Nenhum dado válido encontrado na análise")
+            
         return df_resultado, df_txt
         
     except Exception as e:
-        st.error(f"Erro seguro: {str(e)}")
-        return None, None
+        st.error(f"Erro durante análise: {str(e)}")
+        return pd.DataFrame(), pd.DataFrame()  # Retorna DataFrames vazios em caso de erro
+
 
 # --- Interface Principal Segura ---
 def main():
