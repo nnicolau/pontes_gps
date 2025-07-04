@@ -3,5 +3,5 @@ pandas
 openpyxl
 xlrd
 numpy
-bcrypt
-pyjwt
+python-dotenv==1.0.0
+bcrypt==4.0.1
