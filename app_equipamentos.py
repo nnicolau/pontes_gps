@@ -5,6 +5,8 @@ import io
 import hashlib
 import bcrypt
 import os
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 # Configuração de segurança
 try:
@@ -48,81 +50,46 @@ def validate_file(file):
         return False
     
     try:
-        # Testa leitura rápida do arquivo
         pd.read_excel(file, nrows=5)
         return True
     except Exception as e:
         st.error(f"Arquivo corrompido ou inválido: {str(e)}")
         return False
 
-# Função de Sanitização Melhorada
+# Função de Sanitização
 def sanitize_data(df):
-    """Limpa e valida os dados de entrada com tratamento robusto."""
+    """Limpa e valida os dados de entrada."""
     try:
         # Mapeamento de colunas alternativas
         column_mapping = {
             'id': 'ID',
             'sinal': 'SINAL',
             'data_hora': 'DATA_HORA',
-            'estado': 'ESTADO',
-            'signal': 'SINAL',
-            'date_time': 'DATA_HORA',
-            'status': 'ESTADO'
+            'estado': 'ESTADO'
         }
         df = df.rename(columns=lambda x: column_mapping.get(str(x).lower(), x))
         
-        # Verifica colunas obrigatórias
         required_columns = ['ID', 'SINAL', 'DATA_HORA', 'ESTADO']
         if not all(col in df.columns for col in required_columns):
-            missing = [col for col in required_columns if col not in df.columns]
-            st.error(f"Colunas obrigatórias faltando: {missing}")
+            st.error(f"Colunas obrigatórias faltando: {required_columns}")
             return pd.DataFrame()
         
-        # Debug: mostra dados brutos
-        with st.expander("Visualização dos Dados Brutos"):
-            st.write("Colunas recebidas:", df.columns.tolist())
-            st.write("Amostra dos dados brutos:", df.head())
-            st.write("Tipos de dados brutos:", df.dtypes)
-
-        # Conversão segura de tipos
+        # Conversão de tipos
         df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
         df['DATA_HORA'] = pd.to_datetime(df['DATA_HORA'], errors='coerce')
+        df['ESTADO'] = pd.to_numeric(df['ESTADO'], errors='coerce')
         
-        # Mapeamento de estados diversos
-        state_mapping = {
-            'LIGADO': 1, 'DESLIGADO': 0,
-            'ON': 1, 'OFF': 0,
-            '1': 1, '0': 0,
-            1: 1, 0: 0,
-            'ATIVO': 1, 'INATIVO': 0,
-            'LIG': 1, 'DESL': 0
-        }
-        df['ESTADO'] = df['ESTADO'].map(state_mapping)
-        
-        # Remove linhas inválidas
-        initial_count = len(df)
+        # Filtra dados válidos
         df = df.dropna(subset=required_columns)
-        df = df[df['ESTADO'].notna()]
-        final_count = len(df)
+        df = df[df['ESTADO'].isin([0, 1])]
         
-        # Debug: mostra resultados da sanitização
-        st.write(f"Linhas antes da sanitização: {initial_count}")
-        st.write(f"Linhas após sanitização: {final_count}")
-        st.write(f"Linhas removidas: {initial_count - final_count}")
-        
-        if not df.empty:
-            with st.expander("Visualização dos Dados Sanitizados"):
-                st.write(df.head())
-            return df
-        else:
-            st.error("Nenhum dado válido após sanitização. Verifique os logs acima.")
-            return pd.DataFrame()
-            
+        return df
+    
     except Exception as e:
         st.error(f"Erro durante sanitização: {str(e)}")
         return pd.DataFrame()
 
-# Função de Análise Principal (mantida conforme seu original)
+# Função de Análise
 def analisar_dados(df):
     """Analisa os períodos de funcionamento dos equipamentos."""
     df = df.sort_values(by=["ID", "SINAL", "DATA_HORA"]).reset_index(drop=True)
@@ -161,14 +128,27 @@ def analisar_dados(df):
     
     return df_resultado, df_txt
 
+# Função para exportar Excel com OpenPyXL
+def export_to_excel(df):
+    """Exporta DataFrame para Excel usando OpenPyXL."""
+    output = io.BytesIO()
+    wb = Workbook()
+    ws = wb.active
+    
+    for r in dataframe_to_rows(df, index=False, header=True):
+        ws.append(r)
+    
+    wb.save(output)
+    return output.getvalue()
+
 # Interface Principal
 def main():
     if not check_password():
         st.stop()
     
-    st.title("⚙️ Análise de Estados de Equipamentos (Seguro)")
+    st.title("⚙️ Análise de Estados de Equipamentos")
     
-    uploaded_file = st.file_uploader("Carregue o arquivo Excel com os dados", type=['xlsx', 'xls'])
+    uploaded_file = st.file_uploader("Carregue o arquivo Excel", type=['xlsx', 'xls'])
     
     if uploaded_file and validate_file(uploaded_file):
         try:
@@ -178,7 +158,7 @@ def main():
                 df = sanitize_data(df_raw)
             
             if df is None or df.empty:
-                st.error("Não foi possível processar os dados. Verifique os logs acima.")
+                st.error("Não foi possível processar os dados. Verifique o formato do arquivo.")
                 return
             
             # Análise dos dados
@@ -194,13 +174,11 @@ def main():
                 st.write(f"Total de períodos encontrados: {len(df_resultado)}")
                 st.dataframe(df_resultado)
                 
-                # Exportação Excel
-                output_excel = io.BytesIO()
-                with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-                    df_resultado.to_excel(writer, index=False, sheet_name='Resultados')
+                # Exportação Excel com OpenPyXL
+                excel_data = export_to_excel(df_resultado)
                 st.download_button(
                     label="📥 Baixar Resultados (Excel)",
-                    data=output_excel.getvalue(),
+                    data=excel_data,
                     file_name="resultados_analise.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
