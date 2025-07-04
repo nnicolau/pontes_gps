@@ -36,51 +36,68 @@ def check_password():
     
     return False
 
-# Função para identificar dados inválidos (incluindo períodos < 3 minutos)
+# Função para converter para datetime seguro
+def safe_to_datetime(date_series):
+    """Converte uma série para datetime de forma segura."""
+    if pd.api.types.is_datetime64_any_dtype(date_series):
+        return date_series
+    return pd.to_datetime(date_series, errors='coerce')
+
+# Função para identificar dados inválidos
 def get_invalid_data(df_raw, df_valid, df_resultado):
     """Identifica todos os dados que foram descartados na análise."""
-    # Primeiro, marca os dados válidos que foram usados na análise
-    df_raw['VALIDADO'] = False
-    df_raw['MOTIVO_INVALIDO'] = ''
+    # Faz uma cópia para não modificar o original
+    df_invalid = df_raw.copy()
     
-    # Marca registros com colunas faltantes ou valores inválidos
-    required_columns = ['ID', 'SINAL', 'DATA_HORA', 'ESTADO']
-    for idx, row in df_raw.iterrows():
-        if any(pd.isna(row[col]) for col in required_columns):
-            df_raw.at[idx, 'VALIDADO'] = False
-            df_raw.at[idx, 'MOTIVO_INVALIDO'] = 'Dados faltantes ou inválidos'
-        elif row['ESTADO'] not in [0, 1]:
-            df_raw.at[idx, 'VALIDADO'] = False
-            df_raw.at[idx, 'MOTIVO_INVALIDO'] = 'Estado inválido (não é 0 ou 1)'
+    # Adiciona colunas de status
+    df_invalid['VALIDADO'] = False
+    df_invalid['MOTIVO_INVALIDO'] = ''
     
-    # Agora marca os registros que foram validados mas descartados por terem <3 minutos
+    # Converte datas para garantir comparação correta
+    df_invalid['DATA_HORA'] = safe_to_datetime(df_invalid['DATA_HORA'])
+    
+    # 1. Marca registros com problemas de validação básica
+    mask_invalid = (
+        df_invalid['ID'].isna() |
+        df_invalid['SINAL'].isna() |
+        df_invalid['DATA_HORA'].isna() |
+        ~df_invalid['ESTADO'].isin([0, 1])
+    )
+    
+    df_invalid.loc[mask_invalid, 'MOTIVO_INVALIDO'] = 'Dados faltantes ou inválidos'
+    
+    # 2. Para registros válidos que não estão nos resultados (períodos <3min)
     if not df_resultado.empty:
         # Cria lista de todos os períodos válidos
         valid_periods = []
         for _, periodo in df_resultado.iterrows():
-            start = periodo['Início Ligado']
-            end = periodo['Fim Ligado']
+            start = pd.to_datetime(periodo['Início Ligado'])
+            end = pd.to_datetime(periodo['Fim Ligado'])
             valid_periods.append((start, end))
         
-        # Marca os registros que estão fora dos períodos válidos
-        for idx, row in df_raw.iterrows():
-            if row['MOTIVO_INVALIDO'] == '' and row['VALIDADO'] == False:
-                # Verifica se está em algum período válido
+        # Marca registros que não estão em nenhum período válido
+        for idx, row in df_invalid.iterrows():
+            if row['MOTIVO_INVALIDO'] == '':
                 in_valid_period = False
+                current_time = row['DATA_HORA']
+                
+                if pd.isna(current_time):
+                    continue
+                
                 for start, end in valid_periods:
-                    if start <= row['DATA_HORA'] <= end:
+                    if start <= current_time <= end:
                         in_valid_period = True
                         break
                 
-                if not in_valid_period and row['ESTADO'] in [0, 1]:
-                    df_raw.at[idx, 'VALIDADO'] = False
-                    df_raw.at[idx, 'MOTIVO_INVALIDO'] = 'Período menor que 3 minutos'
+                if not in_valid_period:
+                    df_invalid.at[idx, 'MOTIVO_INVALIDO'] = 'Período menor que 3 minutos'
     
-    # Retorna apenas os dados inválidos
-    df_invalid = df_raw[~df_raw['VALIDADO']].copy()
+    # Filtra apenas os inválidos
+    df_invalid = df_invalid[df_invalid['MOTIVO_INVALIDO'] != '']
+    
     return df_invalid[['ID', 'SINAL', 'DATA_HORA', 'ESTADO', 'MOTIVO_INVALIDO']]
 
-# Função de sanitização básica
+# Função de sanitização
 def sanitize_data(df):
     """Limpa e valida os dados de entrada."""
     try:
@@ -100,14 +117,14 @@ def sanitize_data(df):
         
         # Conversão de tipos
         df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
-        df['DATA_HORA'] = pd.to_datetime(df['DATA_HORA'], errors='coerce')
+        df['DATA_HORA'] = safe_to_datetime(df['DATA_HORA'])
         df['ESTADO'] = pd.to_numeric(df['ESTADO'], errors='coerce')
         
         # Filtra dados válidos
         mask = (
             df['ID'].notna() & 
+            df['SINAL'].notna() & 
             df['DATA_HORA'].notna() & 
-            df['ESTADO'].notna() & 
             df['ESTADO'].isin([0, 1])
         )
         
@@ -120,6 +137,9 @@ def sanitize_data(df):
 # Função principal de análise
 def analisar_dados(df):
     """Analisa os períodos de funcionamento dos equipamentos."""
+    # Garante que as datas estão no formato correto
+    df['DATA_HORA'] = safe_to_datetime(df['DATA_HORA'])
+    
     df = df.sort_values(by=["ID", "SINAL", "DATA_HORA"]).reset_index(drop=True)
     
     periodos_ligado = []
@@ -181,13 +201,17 @@ def main():
         try:
             # Ler os dados
             df_raw = pd.read_excel(uploaded_file, sheet_name="Sheet1")
+            
+            # Converter coluna de data/hora imediatamente
+            df_raw['DATA_HORA'] = safe_to_datetime(df_raw['DATA_HORA'])
+            
             st.success(f"Dados carregados com sucesso! Total de registros: {len(df_raw)}")
             
             # Mostrar dados brutos
             with st.expander("Visualizar Dados Brutos"):
                 st.dataframe(df_raw)
             
-            # Sanitizar os dados (sem mostrar ainda)
+            # Sanitizar os dados
             df_valid = sanitize_data(df_raw.copy())
             
             # Botão para acionar a análise
@@ -199,7 +223,7 @@ def main():
                         # Executar análise
                         df_resultado, df_txt = analisar_dados(df_valid)
                         
-                        # Identificar dados inválidos (incluindo <3 minutos)
+                        # Identificar dados inválidos
                         df_invalid = get_invalid_data(df_raw.copy(), df_valid, df_resultado)
                         
                         # Mostrar seção de dados inválidos
@@ -220,39 +244,41 @@ def main():
                         # Mostrar resultados da análise
                         st.markdown("---")
                         st.subheader("Resultados da Análise")
-                        st.write(f"Períodos com duração superior a 3 minutos encontrados: {len(df_resultado)}")
                         
-                        # Exibir tabela de resultados
-                        st.dataframe(df_resultado)
-                        
-                        # Seção de exportação
-                        st.subheader("Exportar Resultados")
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.download_button(
-                                label="Baixar Resultados em Excel",
-                                data=export_to_excel(df_resultado, 'Resumo_Tempos_Ligado'),
-                                file_name="Resumo_Tempos_Ligado.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-                        
-                        with col2:
-                            output_txt = io.StringIO()
-                            df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
-                            st.download_button(
-                                label="Baixar Eventos em TXT",
-                                data=output_txt.getvalue(),
-                                file_name="Estados_Equipamentos.txt",
-                                mime="text/plain"
-                            )
-                        
-                        # Estatísticas
-                        st.subheader("Estatísticas")
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Total de Períodos", len(df_resultado))
-                        col2.metric("Duração Média (min)", round(df_resultado['Duração (minutos)'].mean(), 2))
-                        col3.metric("Duração Máxima (min)", round(df_resultado['Duração (minutos)'].max(), 2))
+                        if df_resultado.empty:
+                            st.warning("Nenhum período válido encontrado")
+                        else:
+                            st.write(f"Períodos com duração superior a 3 minutos encontrados: {len(df_resultado)}")
+                            st.dataframe(df_resultado)
+                            
+                            # Seção de exportação
+                            st.subheader("Exportar Resultados")
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.download_button(
+                                    label="Baixar Resultados em Excel",
+                                    data=export_to_excel(df_resultado, 'Resumo_Tempos_Ligado'),
+                                    file_name="Resumo_Tempos_Ligado.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
+                            
+                            with col2:
+                                output_txt = io.StringIO()
+                                df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
+                                st.download_button(
+                                    label="Baixar Eventos em TXT",
+                                    data=output_txt.getvalue(),
+                                    file_name="Estados_Equipamentos.txt",
+                                    mime="text/plain"
+                                )
+                            
+                            # Estatísticas
+                            st.subheader("Estatísticas")
+                            col1, col2, col3 = st.columns(3)
+                            col1.metric("Total de Períodos", len(df_resultado))
+                            col2.metric("Duração Média (min)", round(df_resultado['Duração (minutos)'].mean(), 2))
+                            col3.metric("Duração Máxima (min)", round(df_resultado['Duração (minutos)'].max(), 2))
         
         except Exception as e:
             st.error(f"Erro ao processar o arquivo: {str(e)}")
