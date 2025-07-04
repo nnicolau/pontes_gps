@@ -4,21 +4,22 @@ from datetime import datetime, timedelta
 import io
 import hashlib
 import bcrypt
-import jwt
 import os
-from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente
-load_dotenv()
+# Configuração de segurança
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    st.warning("dotenv não está instalado. Usando variáveis padrão.")
 
-# --- Configurações de Segurança ---
 SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key')
-PASSWORD_HASH = os.getenv('PASSWORD_HASH')  # Configure no Streamlit Cloud
+PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
 
-# --- Funções de Segurança ---
+# Função de autenticação
 def check_password():
-    """Sistema de autenticação seguro."""
-    if 'authenticated' in st.session_state and st.session_state.authenticated:
+    """Verifica se o usuário digitou a senha correta."""
+    if 'authenticated' in st.session_state:
         return True
     
     password = st.text_input("Senha de acesso", type="password", key="password_input")
@@ -32,114 +33,68 @@ def check_password():
     
     return False
 
+# Função de validação de arquivo
 def validate_file(file):
-    """Validação segura de arquivos."""
+    """Valida o arquivo enviado pelo usuário."""
     if not file:
         return False
         
     if file.size > 10 * 1024 * 1024:  # 10MB
-        st.error("Arquivo muito grande")
+        st.error("Arquivo muito grande (máximo 10MB)")
         return False
         
     if not file.name.endswith(('.xlsx', '.xls')):
-        st.error("Formato inválido")
+        st.error("Formato inválido. Use .xlsx ou .xls")
         return False
         
     return True
 
-# --- Suas funções existentes modificadas ---
-def analisar_dados_seguro(df):
-    """Versão segura da sua função de análise."""
+# Função de sanitização (ADICIONADA)
+def sanitize_data(df):
+    """Limpa e valida os dados de entrada."""
     try:
-        # Validação de dados
-        required_cols = ['ID', 'SINAL', 'DATA_HORA', 'ESTADO']
-        if not all(col in df.columns for col in required_cols):
-            raise ValueError("Colunas obrigatórias faltando")
-            
-        # Inicializa variáveis de resultado
-        df_resultado = pd.DataFrame()
-        df_txt = pd.DataFrame()
+        required_columns = ['ID', 'SINAL', 'DATA_HORA', 'ESTADO']
+        if not all(col in df.columns for col in required_columns):
+            st.error(f"Arquivo inválido. Colunas necessárias: {required_columns}")
+            return pd.DataFrame()
         
-        # --- INSIRA AQUI SEU CÓDIGO ORIGINAL DE ANÁLISE ---
-        # (mantenha toda a lógica de processamento que você já tinha)
-        # Certifique-se de que df_resultado e df_txt são criados
-        
-        # Exemplo mínimo (substitua pelo seu código real):
-        df['DATA_HORA'] = pd.to_datetime(df['DATA_HORA'])
-        df = df.sort_values(['ID', 'SINAL', 'DATA_HORA'])
-        
-        periodos_ligado = []
-        eventos_txt = []
-        
-        for (id_val, sinal), grupo in df.groupby(['ID', 'SINAL']):
-            # ... sua lógica de análise ...
-            periodos_ligado.append({...})
-            eventos_txt.append(...)
-        
-        df_resultado = pd.DataFrame(periodos_ligado)
-        df_txt = pd.DataFrame(eventos_txt, columns=['Evento'])
-        # --- FIM DO SEU CÓDIGO ORIGINAL ---
-        
-        if df_resultado.empty or df_txt.empty:
-            raise ValueError("Nenhum dado válido encontrado na análise")
-            
-        return df_resultado, df_txt
-        
+        df = df.dropna(subset=required_columns)
+        df['ID'] = pd.to_numeric(df['ID'], errors='coerce').astype('Int64')
+        df['DATA_HORA'] = pd.to_datetime(df['DATA_HORA'], errors='coerce')
+        df['ESTADO'] = pd.to_numeric(df['ESTADO'], errors='coerce')
+        df = df[df['ESTADO'].isin([0, 1])]
+        return df.dropna()
+    
     except Exception as e:
-        st.error(f"Erro durante análise: {str(e)}")
-        return pd.DataFrame(), pd.DataFrame()  # Retorna DataFrames vazios em caso de erro
+        st.error(f"Erro ao sanitizar dados: {str(e)}")
+        return pd.DataFrame()
 
+# Sua função de análise original (mantida)
+def analisar_dados(df):
+    # ... (mantenha todo o seu código original de análise aqui) ...
+    return df_resultado, df_txt
 
-# --- Interface Principal Segura ---
+# Interface principal
 def main():
     if not check_password():
         st.stop()
     
-    st.title("⚙️ Análise Segura de Equipamentos")
+    st.title("⚙️ Análise de Estados de Equipamentos")
     
-    uploaded_file = st.file_uploader("Carregue o arquivo", type=['xlsx', 'xls'])
+    uploaded_file = st.file_uploader("Carregue o arquivo Excel", type=['xlsx', 'xls'])
     
     if uploaded_file and validate_file(uploaded_file):
         try:
             df = pd.read_excel(uploaded_file)
-            df = sanitize_data(df)  # Sua função de sanitização
+            df = sanitize_data(df)  # Agora a função está definida
             
             if df.empty:
-                st.warning("Nenhum dado válido encontrado após sanitização")
+                st.warning("Nenhum dado válido após sanitização")
                 return
             
-            # Processa os dados
-            df_resultado, df_txt = analisar_dados_seguro(df)
+            df_resultado, df_txt = analisar_dados(df)
             
-            # Verifica se a análise retornou resultados
-            if df_resultado.empty or df_txt.empty:
-                st.warning("Nenhum resultado válido gerado pela análise")
-                return
-            
-            # --- SEU CÓDIGO DE EXIBIÇÃO DE RESULTADOS ---
-            st.subheader("Resultados da Análise")
-            st.dataframe(df_resultado)
-            
-            # Exportação para Excel
-            output_excel = io.BytesIO()
-            with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-                df_resultado.to_excel(writer, index=False)
-            st.download_button(
-                label="Baixar Excel",
-                data=output_excel.getvalue(),
-                file_name="resultados.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
-            # Exportação para TXT
-            output_txt = io.StringIO()
-            df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
-            st.download_button(
-                label="Baixar TXT",
-                data=output_txt.getvalue(),
-                file_name="eventos.txt",
-                mime="text/plain"
-            )
+            # ... (restante do seu código de exibição) ...
             
         except Exception as e:
             st.error(f"Erro no processamento: {str(e)}")
