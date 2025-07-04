@@ -46,14 +46,11 @@ def safe_to_datetime(date_series):
 # Função para identificar dados inválidos
 def get_invalid_data(df_raw, df_valid, df_resultado):
     """Identifica todos os dados que foram descartados na análise."""
-    # Faz uma cópia para não modificar o original
     df_invalid = df_raw.copy()
-    
-    # Adiciona colunas de status
     df_invalid['VALIDADO'] = False
     df_invalid['MOTIVO_INVALIDO'] = ''
     
-    # Converte datas para garantir comparação correta
+    # Converte datas
     df_invalid['DATA_HORA'] = safe_to_datetime(df_invalid['DATA_HORA'])
     
     # 1. Marca registros com problemas de validação básica
@@ -137,9 +134,7 @@ def sanitize_data(df):
 # Função principal de análise
 def analisar_dados(df):
     """Analisa os períodos de funcionamento dos equipamentos."""
-    # Garante que as datas estão no formato correto
     df['DATA_HORA'] = safe_to_datetime(df['DATA_HORA'])
-    
     df = df.sort_values(by=["ID", "SINAL", "DATA_HORA"]).reset_index(drop=True)
     
     periodos_ligado = []
@@ -201,8 +196,6 @@ def main():
         try:
             # Ler os dados
             df_raw = pd.read_excel(uploaded_file, sheet_name="Sheet1")
-            
-            # Converter coluna de data/hora imediatamente
             df_raw['DATA_HORA'] = safe_to_datetime(df_raw['DATA_HORA'])
             
             st.success(f"Dados carregados com sucesso! Total de registros: {len(df_raw)}")
@@ -220,65 +213,65 @@ def main():
                     st.error("Nenhum dado válido para análise")
                 else:
                     with st.spinner("Processando dados..."):
-                        # Executar análise
-                        df_resultado, df_txt = analisar_dados(df_valid)
-                        
-                        # Identificar dados inválidos
-                        df_invalid = get_invalid_data(df_raw.copy(), df_valid, df_resultado)
-                        
-                        # Mostrar seção de dados inválidos
-                        st.subheader("Dados Invalidados")
-                        if df_invalid.empty:
-                            st.success("Todos os dados foram considerados válidos!")
-                        else:
-                            st.write(f"Total de registros invalidados: {len(df_invalid)}")
-                            st.dataframe(df_invalid)
-                            
-                            st.download_button(
-                                label="Baixar Dados Invalidados (Excel)",
-                                data=export_to_excel(df_invalid, 'Dados_Invalidos'),
-                                file_name="dados_invalidos.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-                        
-                        # Mostrar resultados da análise
-                        st.markdown("---")
-                        st.subheader("Resultados da Análise")
-                        
-                        if df_resultado.empty:
-                            st.warning("Nenhum período válido encontrado")
-                        else:
-                            st.write(f"Períodos com duração superior a 3 minutos encontrados: {len(df_resultado)}")
-                            st.dataframe(df_resultado)
-                            
-                            # Seção de exportação
-                            st.subheader("Exportar Resultados")
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.download_button(
-                                    label="Baixar Resultados em Excel",
-                                    data=export_to_excel(df_resultado, 'Resumo_Tempos_Ligado'),
-                                    file_name="Resumo_Tempos_Ligado.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                            
-                            with col2:
-                                output_txt = io.StringIO()
-                                df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
-                                st.download_button(
-                                    label="Baixar Eventos em TXT",
-                                    data=output_txt.getvalue(),
-                                    file_name="Estados_Equipamentos.txt",
-                                    mime="text/plain"
-                                )
-                            
-                            # Estatísticas
-                            st.subheader("Estatísticas")
-                            col1, col2, col3 = st.columns(3)
-                            col1.metric("Total de Períodos", len(df_resultado))
-                            col2.metric("Duração Média (min)", round(df_resultado['Duração (minutos)'].mean(), 2))
-                            col3.metric("Duração Máxima (min)", round(df_resultado['Duração (minutos)'].max(), 2))
+                        # Executar análise e armazenar na sessão
+                        st.session_state.df_resultado, st.session_state.df_txt = analisar_dados(df_valid)
+                        st.session_state.df_invalid = get_invalid_data(df_raw.copy(), df_valid, st.session_state.df_resultado)
+            
+            # Mostrar resultados se existirem na sessão
+            if 'df_resultado' in st.session_state:
+                # Mostrar seção de dados inválidos
+                st.subheader("Dados Invalidados")
+                if st.session_state.df_invalid.empty:
+                    st.success("Todos os dados foram considerados válidos!")
+                else:
+                    st.write(f"Total de registros invalidados: {len(st.session_state.df_invalid)}")
+                    st.dataframe(st.session_state.df_invalid)
+                    
+                    st.download_button(
+                        label="Baixar Dados Invalidados (Excel)",
+                        data=export_to_excel(st.session_state.df_invalid, 'Dados_Invalidos'),
+                        file_name="dados_invalidos.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                
+                # Mostrar resultados da análise
+                st.markdown("---")
+                st.subheader("Resultados da Análise")
+                
+                if st.session_state.df_resultado.empty:
+                    st.warning("Nenhum período válido encontrado")
+                else:
+                    st.write(f"Períodos com duração superior a 3 minutos encontrados: {len(st.session_state.df_resultado)}")
+                    st.dataframe(st.session_state.df_resultado)
+                    
+                    # Seção de exportação (sempre disponível após análise)
+                    st.subheader("Exportar Resultados")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.download_button(
+                            label="Baixar Resultados em Excel",
+                            data=export_to_excel(st.session_state.df_resultado, 'Resumo_Tempos_Ligado'),
+                            file_name="Resumo_Tempos_Ligado.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    
+                    with col2:
+                        output_txt = io.StringIO()
+                        st.session_state.df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
+                        st.download_button(
+                            label="Baixar Eventos em TXT",
+                            data=output_txt.getvalue(),
+                            file_name="Estados_Equipamentos.txt",
+                            mime="text/plain"
+                        )
+                    
+                    # Estatísticas
+                    st.subheader("Estatísticas")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Total de Períodos", len(st.session_state.df_resultado))
+                    col2.metric("Duração Média (min)", round(st.session_state.df_resultado['Duração (minutos)'].mean(), 2))
+                    col3.metric("Duração Máxima (min)", round(st.session_state.df_resultado['Duração (minutos)'].max(), 2))
         
         except Exception as e:
             st.error(f"Erro ao processar o arquivo: {str(e)}")
