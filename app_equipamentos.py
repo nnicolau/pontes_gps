@@ -95,7 +95,7 @@ def main():
                 
                 # Excel
                 output_excel = io.BytesIO()
-                with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+                with pd.ExcelWriter(output_excel, engine=''openpyxl') as writer:
                     df_resultado.to_excel(writer, index=False, sheet_name='Resumo_Tempos_Ligado')
                 st.download_button(
                     label="Baixar Resultados em Excel",
