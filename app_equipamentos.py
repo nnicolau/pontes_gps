@@ -19,7 +19,7 @@ except ImportError:
 SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key-123')
 PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
 
-# Funções de Segurança
+# Funções de Segurança (mantidas iguais)
 def check_password():
     """Verifica se o usuário digitou a senha correta."""
     if 'authenticated' in st.session_state and st.session_state.authenticated:
@@ -41,7 +41,7 @@ def validate_file(file):
     if not file:
         return False
         
-    if file.size > 10 * 1024 * 1024:  # 10MB
+    if file.size > 10 * 1024 * 1024:
         st.error("Arquivo muito grande (máximo 10MB)")
         return False
         
@@ -56,11 +56,10 @@ def validate_file(file):
         st.error(f"Arquivo corrompido ou inválido: {str(e)}")
         return False
 
-# Função de Sanitização
+# Função de Sanitização (mantida igual)
 def sanitize_data(df):
     """Limpa e valida os dados de entrada."""
     try:
-        # Mapeamento de colunas alternativas
         column_mapping = {
             'id': 'ID',
             'sinal': 'SINAL',
@@ -74,12 +73,10 @@ def sanitize_data(df):
             st.error(f"Colunas obrigatórias faltando: {required_columns}")
             return pd.DataFrame()
         
-        # Conversão de tipos
         df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
         df['DATA_HORA'] = pd.to_datetime(df['DATA_HORA'], errors='coerce')
         df['ESTADO'] = pd.to_numeric(df['ESTADO'], errors='coerce')
         
-        # Filtra dados válidos
         df = df.dropna(subset=required_columns)
         df = df[df['ESTADO'].isin([0, 1])]
         
@@ -89,7 +86,7 @@ def sanitize_data(df):
         st.error(f"Erro durante sanitização: {str(e)}")
         return pd.DataFrame()
 
-# Função de Análise
+# Função de Análise (mantida igual)
 def analisar_dados(df):
     """Analisa os períodos de funcionamento dos equipamentos."""
     df = df.sort_values(by=["ID", "SINAL", "DATA_HORA"]).reset_index(drop=True)
@@ -128,7 +125,7 @@ def analisar_dados(df):
     
     return df_resultado, df_txt
 
-# Função para exportar Excel com OpenPyXL
+# Função para exportar Excel com OpenPyXL (mantida igual)
 def export_to_excel(df):
     """Exporta DataFrame para Excel usando OpenPyXL."""
     output = io.BytesIO()
@@ -141,7 +138,7 @@ def export_to_excel(df):
     wb.save(output)
     return output.getvalue()
 
-# Interface Principal
+# Interface Principal (modificada para mostrar dados brutos)
 def main():
     if not check_password():
         st.stop()
@@ -152,8 +149,8 @@ def main():
     
     if uploaded_file and validate_file(uploaded_file):
         try:
-            # Leitura e sanitização
-            with st.spinner("Processando arquivo..."):
+            # Leitura dos dados
+            with st.spinner("Carregando dados..."):
                 df_raw = pd.read_excel(uploaded_file)
                 df = sanitize_data(df_raw)
             
@@ -161,44 +158,75 @@ def main():
                 st.error("Não foi possível processar os dados. Verifique o formato do arquivo.")
                 return
             
-            # Análise dos dados
-            with st.spinner("Analisando dados..."):
-                df_resultado, df_txt = analisar_dados(df)
+            # Cria abas para visualização
+            tab1, tab2 = st.tabs(["📊 Dados Brutos", "📈 Resultados da Análise"])
             
-            # Exibição de resultados
-            st.subheader("Resultados da Análise")
-            
-            if df_resultado.empty:
-                st.warning("Nenhum período de funcionamento encontrado")
-            else:
-                st.write(f"Total de períodos encontrados: {len(df_resultado)}")
-                st.dataframe(df_resultado)
+            with tab1:
+                st.subheader("Dados Brutos Completos")
+                st.write(f"Total de registros: {len(df_raw)}")
                 
-                # Exportação Excel com OpenPyXL
-                excel_data = export_to_excel(df_resultado)
+                # Mostra dados brutos com filtros
+                st.dataframe(df_raw, height=500)
+                
+                # Estatísticas dos dados brutos
+                st.subheader("Estatísticas dos Dados Brutos")
+                if 'ID' in df_raw.columns:
+                    st.write(f"Equipamentos únicos: {df_raw['ID'].nunique()}")
+                if 'DATA_HORA' in df_raw.columns:
+                    st.write(f"Período coberto: {df_raw['DATA_HORA'].min()} a {df_raw['DATA_HORA'].max()}")
+                
+                # Download dos dados brutos
                 st.download_button(
-                    label="📥 Baixar Resultados (Excel)",
-                    data=excel_data,
-                    file_name="resultados_analise.xlsx",
+                    label="📥 Baixar Dados Brutos (Excel)",
+                    data=export_to_excel(df_raw),
+                    file_name="dados_brutos.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+            
+            with tab2:
+                # Análise dos dados
+                with st.spinner("Analisando dados..."):
+                    df_resultado, df_txt = analisar_dados(df)
                 
-                # Exportação TXT
-                output_txt = io.StringIO()
-                df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
-                st.download_button(
-                    label="📥 Baixar Eventos (TXT)",
-                    data=output_txt.getvalue(),
-                    file_name="eventos_equipamentos.txt",
-                    mime="text/plain"
-                )
+                st.subheader("Resultados da Análise")
                 
-                # Estatísticas
-                st.subheader("Estatísticas")
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Total Períodos", len(df_resultado))
-                col2.metric("Duração Média (min)", f"{df_resultado['Duração (minutos)'].mean():.1f}")
-                col3.metric("Duração Máxima (min)", f"{df_resultado['Duração (minutos)'].max():.1f}")
+                if df_resultado.empty:
+                    st.warning("Nenhum período de funcionamento encontrado")
+                else:
+                    st.write(f"Total de períodos encontrados: {len(df_resultado)}")
+                    
+                    # Mostra resultados com filtros
+                    st.dataframe(df_resultado, height=400)
+                    
+                    # Gráfico de duração dos períodos
+                    st.subheader("Distribuição das Durações")
+                    st.bar_chart(df_resultado['Duração (minutos)'].value_counts())
+                    
+                    # Exportação dos resultados
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            label="📥 Baixar Resultados (Excel)",
+                            data=export_to_excel(df_resultado),
+                            file_name="resultados_analise.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    with col2:
+                        output_txt = io.StringIO()
+                        df_txt.to_csv(output_txt, index=False, header=False, lineterminator='\n')
+                        st.download_button(
+                            label="📥 Baixar Eventos (TXT)",
+                            data=output_txt.getvalue(),
+                            file_name="eventos_equipamentos.txt",
+                            mime="text/plain"
+                        )
+                    
+                    # Estatísticas
+                    st.subheader("Estatísticas")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Total Períodos", len(df_resultado))
+                    col2.metric("Duração Média (min)", f"{df_resultado['Duração (minutos)'].mean():.1f}")
+                    col3.metric("Duração Máxima (min)", f"{df_resultado['Duração (minutos)'].max():.1f}")
         
         except Exception as e:
             st.error(f"Erro no processamento: {str(e)}")
