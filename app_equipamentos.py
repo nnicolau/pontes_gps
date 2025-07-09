@@ -251,4 +251,4 @@ def main():
             st.error(f"Erro ao processar o arquivo: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+
