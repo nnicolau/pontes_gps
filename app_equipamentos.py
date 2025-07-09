@@ -12,19 +12,19 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # load_dotenv()
 
 # --- Função de autenticação segura com bcrypt ---
-def autenticar_usuario():
+ef autenticar_usuario():
     if 'autenticado' in st.session_state and st.session_state.autenticado:
         return True
 
     st.set_page_config(page_title="Gestão de Férias - Login", layout="wide")
     st.title("🔐 Autenticação")
-    password = st.text_input("Senha", type="password")  # Removido o campo de utilizador
+    password = st.text_input("Senha", type="password")
 
     if st.button("Entrar"):
-        # Hash da senha mestra (gerado previamente com BCrypt)
-        SENHA_MASTER_HASH = os.getenv("$2b$12$TyoE6rDr5qZOWtW9/OS0mO1g06bKa2rA4x8nJ8Nylw29SUQYoI5g") 
-
-        if SENHA_MASTER_HASH and bcrypt.checkpw(password.encode(), SENHA_MASTER_HASH.encode()):
+        # Acessando o hash armazenado nos secrets do Streamlit
+        SENHA_MASTER_HASH = st.secrets.get("$2b$12$TyoE6rDr5qZOWtW9/OS0mO1g06bKa2rA4x8nJ8Nylw29SUQYoI5g")
+        
+        if SENHA_MASTER_HASH and bcrypt.checkpw(password.encode('utf-8'), SENHA_MASTER_HASH.encode('utf-8')):
             st.session_state.autenticado = True
             st.session_state.last_activity = datetime.now()
             st.success("✅ Login efetuado com sucesso.")
@@ -32,8 +32,7 @@ def autenticar_usuario():
         else:
             st.error("❌ Senha incorreta.")
 
-    st.stop()
-    
+    st.stop()    
 def check_timeout():
     if 'last_activity' in st.session_state:
         if datetime.now() - st.session_state['last_activity'] > timedelta(minutes=20):
