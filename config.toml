@@ -2,3 +2,6 @@
 enableCORS = false
 enableXsrfProtection = true
 maxUploadSize = 10  # Em MB
+# streamlit-secrets.toml
+[SENHA_MASTER_HASH]
+value = "$2b$12$TyoE6rDr5qZOWtW9/OS0mO1g06bKa2rA4x8nJ8Nylw29SUQYoI5g"
