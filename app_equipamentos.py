@@ -22,7 +22,7 @@ def autenticar_usuario():
 
     if st.button("Entrar"):
         # Hash da senha mestra (gerado previamente com BCrypt)
-        SENHA_MASTER_HASH = os.getenv("$2b$12$omua84GONuwTtfSChtKuL./RnJfSxp1BdrnHiDiQZHaZm6sNZrbSa") 
+        SENHA_MASTER_HASH = os.getenv("$2b$12$TyoE6rDr5qZOWtW9/OS0mO1g06bKa2rA4x8nJ8Nylw29SUQYoI5g") 
 
         if SENHA_MASTER_HASH and bcrypt.checkpw(password.encode(), SENHA_MASTER_HASH.encode()):
             st.session_state.autenticado = True
