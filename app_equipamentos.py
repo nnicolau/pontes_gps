@@ -18,25 +18,22 @@ def autenticar_usuario():
 
     st.set_page_config(page_title="Gestão de Férias - Login", layout="wide")
     st.title("🔐 Autenticação")
-    username = st.text_input("Utilizador")
-    password = st.text_input("Senha", type="password")
+    password = st.text_input("Senha", type="password")  # Removido o campo de utilizador
 
     if st.button("Entrar"):
-        hash_guardado = os.getenv(f"USER_{username}")
-        if hash_guardado:
-            if bcrypt.checkpw(password.encode(), hash_guardado.encode()):
-                st.session_state.autenticado = True
-                st.session_state.usuario = username
-                st.session_state.last_activity = datetime.now()
-                st.success("✅ Login efetuado com sucesso.")
-                st.rerun()
-            else:
-                st.error("❌ Senha incorreta.")
+        # Hash da senha mestra (gerado previamente com BCrypt)
+        SENHA_MASTER_HASH = os.getenv("SENHA_MASTER_HASH")  # Ex: "$2b$12$xyz123..."
+
+        if SENHA_MASTER_HASH and bcrypt.checkpw(password.encode(), SENHA_MASTER_HASH.encode()):
+            st.session_state.autenticado = True
+            st.session_state.last_activity = datetime.now()
+            st.success("✅ Login efetuado com sucesso.")
+            st.rerun()
         else:
-            st.error("❌ Utilizador não encontrado.")
+            st.error("❌ Senha incorreta.")
 
     st.stop()
-
+    
 def check_timeout():
     if 'last_activity' in st.session_state:
         if datetime.now() - st.session_state['last_activity'] > timedelta(minutes=20):
