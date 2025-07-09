@@ -12,7 +12,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # load_dotenv()
 
 # --- Função de autenticação segura com bcrypt ---
-ef autenticar_usuario():
+def autenticar_usuario():
     if 'autenticado' in st.session_state and st.session_state.autenticado:
         return True
 
