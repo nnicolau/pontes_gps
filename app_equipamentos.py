@@ -9,7 +9,7 @@ from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 # --- Carregar variáveis do .env ---
-#load_dotenv()
+# load_dotenv()
 
 # --- Função de autenticação segura com bcrypt ---
 def autenticar_usuario():
