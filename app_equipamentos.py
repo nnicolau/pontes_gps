@@ -154,8 +154,6 @@ def export_to_excel(df, sheet_name='Sheet1'):
 
 # Interface principal
 def main():
-    if not check_password():
-        st.stop()
     
     st.title("⚙️ Análise de Estados de Equipamentos")
     st.markdown("""
